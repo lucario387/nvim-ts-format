@@ -90,6 +90,6 @@
   ] @format.append-newline
   (_) .) @format.indent
 
-(string) @format.ignore
+(string) @format.keep
 
 (quantifier) @format.ignore

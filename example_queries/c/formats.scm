@@ -87,4 +87,3 @@
 (preproc_function_def
   parameters: (preproc_params) @format.append-space) @format.append-newline
 
-(ERROR) @format.ignore
