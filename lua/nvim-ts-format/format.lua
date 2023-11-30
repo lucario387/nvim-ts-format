@@ -221,8 +221,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         local text = vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {})
         if injections[cur:id()] then
           local injection = injections[cur:id()]
-          traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
-            fmt_end_row)
+          traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row, fmt_end_row)
         elseif cur:named() then
           traverse(bufnr, lines, cur, root, level, lang, injections, fmt_start_row, fmt_end_row)
         else
@@ -238,13 +237,14 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
   for child, _ in node:iter_children() do
     local c_srow = child:start()
     local c_erow = child:end_()
+    local id = child:id()
     if fmt_start_row and c_erow < fmt_start_row then
       -- This should mean we haven't reach the first line to edit yet, so modify the first line accordingly
-      if q["format.indent.begin"][child:id()] then
+      if q["format.indent.begin"][id] then
         level = level + 1
         lines[#lines] = string.rep(indent_str, level)
       end
-      if q["format.indent.end"][child:id()] then
+      if q["format.indent.end"][id] then
         level = level - 1
         lines[#lines] = string.rep(indent_str, level)
       end
@@ -255,31 +255,31 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
     end
     -- If the node is ignored, ignore and write it as is
     -- If node have injections, ignore completely, let the injected tree handle the texts
-    if q["format.remove"][child:id()] then
+    if q["format.remove"][id] then
       goto continue
     end
-    if q["format.ignore"][child:id()] then
+    if q["format.ignore"][id] then
       local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
       local ignored_lines = vim.split(text, "\n+", { trimempty = true })
-      append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][child:id()]["append-newline"] })
+      append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][id]["append-newline"] })
       goto continue
-    elseif injections[child:id()] then
-      local injection = injections[child:id()]
+    elseif injections[id] then
+      local injection = injections[id]
       traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
         fmt_end_row)
       goto continue
     end
-    -- if q["format.replace"][child:id()] then
-    --   lines[#lines] = lines[#lines] .. q["format.replace"][child:id()]
+    -- if q["format.replace"][id] then
+    --   lines[#lines] = lines[#lines] .. q["format.replace"][id]
     -- end
-    if not q["format.no-prepend"][child:id()] then
-      if q["format.prepend-newline"][child:id()] then
+    if not q["format.no-prepend"][id] then
+      if q["format.prepend-newline"][id] then
         lines[#lines + 1] = string.rep(indent_str, level)
-      elseif q["format.prepend-space"][child:id()] then
+      elseif q["format.prepend-space"][id] then
         lines[#lines] = lines[#lines] .. " "
       end
     end
-    if q["format.keep"][child:id()] then
+    if q["format.keep"][id] then
       append_lines(lines,
         vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n", { trimempty = true }), {})
     elseif child:named_child_count() == 0 then
@@ -288,26 +288,26 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
     else
       traverse(bufnr, lines, child, root, level, lang, injections, fmt_start_row, fmt_end_row)
     end
-    if q["format.indent.begin"][child:id()] then
+    if q["format.indent.begin"][id] then
       level = level + 1
       lines[#lines + 1] = string.rep(indent_str, level)
       goto continue
     end
-    if q["format.indent.dedent"][child:id()] then
+    if q["format.indent.dedent"][id] then
       if string.match(lines[#lines], "^%s*" .. get_node_text(child, bufnr)) then
-        local amount = tonumber(q["format.indent.dedent"][child:id()]["amount"]) or 1
+        local amount = tonumber(q["format.indent.dedent"][id]["amount"]) or 1
         lines[#lines] = string.sub(lines[#lines], 1 + #string.rep(indent_str, amount))
       end
     end
 
-    if q["format.indent.end"][child:id()] then
+    if q["format.indent.end"][id] then
       level = math.max(level - 1, 0)
       -- lines[#lines + 1] = string.rep(indent_str, level)
     end
-    if not q["format.no-append"][child:id()] then
-      if q["format.append-newline"][child:id()] then
+    if not q["format.no-append"][id] then
+      if q["format.append-newline"][id] then
         lines[#lines + 1] = string.rep(indent_str, level)
-      elseif q["format.append-space"][child:id()] then
+      elseif q["format.append-space"][id] then
         lines[#lines] = lines[#lines] .. " "
       end
     end
@@ -333,7 +333,7 @@ M.format = function(lnum, count)
 
   local start_row = lnum - 1
   local start_col = vim.fn.indent(lnum)
-  local end_row = vim.fn.prevnonblank(start_row + count - 1)
+  local end_row = math.max(start_row, vim.fn.prevnonblank(start_row + count - 1))
   local end_col = #(vim.api.nvim_buf_get_lines(bufnr, end_row, end_row + 1, false)[1] or "") - 1
 
   -- Not optimal, but for this we need the most up-to-date language tree possible

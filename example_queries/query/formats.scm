@@ -74,10 +74,6 @@
   (parameters
     (_) @format.prepend-space))
 
-; (
-;   (grouping
-;   "(" @format.indent.begin) @_group
-;   (#not-has-parent? @_group grouping))
 (grouping
   "(" @format.ignore
   .
