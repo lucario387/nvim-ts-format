@@ -1,5 +1,7 @@
 local ts = vim.treesitter
 local get_node_text = vim.treesitter.get_node_text
+--- @type TSFormatOpts
+local opts = require("nvim-ts-format.configs")
 local M = {}
 
 
@@ -14,13 +16,6 @@ local M = {}
 ---@class FormatOpts
 ---@field indent_type "tab" | "space"
 ---@field max_width integer
-
-
---- @type FormatOpts
-local default_options = {
-  indent_type = "space",
-  max_width = 120,
-}
 
 --- Taken from nvim-treesitter
 --- Memoize a function using hash_fn to hash the arguments.
@@ -78,6 +73,7 @@ local get_formats = memoize(
 ---@param lang string
   function(bufnr, root, lang)
     local map = {
+      ["format.keep"] = {},
       ["format.indent"] = {},
       ["format.indent.begin"] = {},  -- +1 shiftwidth
       ["format.indent.end"] = {},    -- -1 shiftwidth
@@ -92,10 +88,9 @@ local get_formats = memoize(
       ["format.ignore"] = {},
       ["format.remove"] = {},
       ["format.handle-string"] = {},
-      -- ["level"] = {},
     }
 
-    local query = (ts.query.get or ts.get_query)(lang, "formats")
+    local query = ts.query.get(lang, "formats")
     if not query then
       return map
     end
@@ -111,13 +106,23 @@ local get_formats = memoize(
         map["format.indent"][node:parent():id()] = {}
       end
     end
-    -- map["level"][root:id()] = 0
 
     return map
   end, function(bufnr, root, lang)
     return tostring(bufnr) .. root:id() .. "_" .. lang
   end
 )
+
+---@type fun(bufnr: integer, filetype: string): TSFormatFtOpts
+local get_ft_opts = memoize(function(bufnr, ft)
+  return opts[ft] and opts[ft] or opts.default or {
+    indent_type = vim.bo[bufnr].expandtab and "spaces" or "tabs",
+    max_width = 120,
+    indent_width = 2,
+  } --[[@as TSFormatFtOpts]]
+end, function(bufnr, ft)
+    return tostring(bufnr) .. ft
+end)
 
 ---@class AppendLineOpts
 ---@field prepend_newline? boolean if true, insert entire text from a newline. Otherwise, start from the last line
@@ -184,10 +189,10 @@ end
 --- @param fmt_end_row? integer
 local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_start_row, fmt_end_row)
   local q = get_formats(bufnr, root, lang)
-  local indent_size = vim.fn.shiftwidth()
-  local indent_str = vim.bo[bufnr].expandtab and string.rep(" ", indent_size) or "\t"
-  -- local sw = vim.filetype.get_option(, "shiftwidth")
-  -- local indent_level = sw ~= 0 and sw or vim.filetype.get_option(vim.)
+  local ft = vim.bo[bufnr].filetype
+  local ft_opts = get_ft_opts(bufnr, ft)
+  local indent_size = ft_opts.indent_width
+  local indent_str = ft_opts.indent_type == "spaces" and string.rep(" ", indent_size) or "\t"
 
   -- TODO: Need to handle custom injection cases
   -- Learn how to clip into injected ranges
@@ -248,15 +253,17 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       -- We go too out of the range to care about. Skip it
       return
     end
-    if fmt_start_row and fmt_end_row and (c_erow < fmt_start_row or fmt_end_row < c_srow) then
-      goto continue
-    end
     -- If the node is ignored, ignore and write it as is
     -- If node have injections, ignore completely, let the injected tree handle the texts
     if q["format.remove"][child:id()] then
       goto continue
     end
-    if injections[child:id()] and not q["format.ignore"][child:id()] then
+    if q["format.ignore"][child:id()] then
+      local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
+      local ignored_lines = vim.split(text, "\n+", { trimempty = true })
+      append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][child:id()]["append-newline"] })
+      goto continue
+    elseif injections[child:id()] then
       local injection = injections[child:id()]
       traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
         fmt_end_row)
@@ -272,11 +279,9 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         lines[#lines] = lines[#lines] .. " "
       end
     end
-    if q["format.ignore"][child:id()] then
-      local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
-      local ignored_lines = vim.split(text, "\n+", { trimempty = true })
-      append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][child:id()]["append-newline"] })
-      goto continue
+    if q["format.keep"][child:id()] then
+      append_lines(lines,
+        vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n", { trimempty = true }), {})
     elseif child:named_child_count() == 0 then
       append_lines(lines,
         vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n+", { trimempty = true }), {})
