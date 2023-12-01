@@ -73,6 +73,8 @@ local get_formats = memoize(
 ---@param lang string
   function(bufnr, root, lang)
     local map = {
+      ["format.remove"] = {},
+      ["format.ignore"] = {},
       ["format.keep"] = {},
       ["format.indent"] = {},
       ["format.indent.begin"] = {},  -- +1 shiftwidth
@@ -81,12 +83,10 @@ local get_formats = memoize(
       ["format.indent.zero"] = {},   -- zero-d indent
       ["format.prepend-space"] = {},
       ["format.prepend-newline"] = {},
+      ["format.no-prepend"] = {},
       ["format.append-space"] = {},
       ["format.append-newline"] = {},
-      ["format.no-prepend"] = {},
       ["format.no-append"] = {},
-      ["format.ignore"] = {},
-      ["format.remove"] = {},
       ["format.handle-string"] = {},
     }
 
@@ -103,7 +103,7 @@ local get_formats = memoize(
         map[query.captures[id]][node:id()] = metadata or {}
       end
       if query.captures[id] == "format.indent.begin" then
-        map["format.indent"][node:parent():id()] = {}
+        map["format.indent"][node:parent():id()] = metadata or {}
       end
     end
 
@@ -121,7 +121,7 @@ local get_ft_opts = memoize(function(bufnr, ft)
     indent_width = 2,
   } --[[@as TSFormatFtOpts]]
 end, function(bufnr, ft)
-    return tostring(bufnr) .. ft
+  return tostring(bufnr) .. ft
 end)
 
 ---@class AppendLineOpts
@@ -144,36 +144,39 @@ local function append_lines(lines, lines_to_append, opts)
 end
 
 ---@param parser LanguageTree
----@return table<integer, InjectionTree>
+---@return table<string, InjectionTree>
 local function get_injections(parser)
   local ignored_injections = {
     comment = true, -- This is useless
     luap = true,
     regex = true,
   }
-  ---@type table<integer, InjectionTree>
+  ---@type table<string, InjectionTree>
   local injections = {}
 
-  parser:for_each_tree(function(root_tree, root_ltree)
-    if ignored_injections[root_ltree:lang()] then return end
-    local root = root_tree:root()
-    for _, child in pairs(root_ltree:children()) do
-      if not ignored_injections[child:lang()] then
-        for _, tree in pairs(child:trees()) do
-
-          local r = tree:root()
-          local node = assert(root:named_descendant_for_range(r:range()))
-          if not injections[node:id()] or r:byte_length() > injections[node:id()].root:byte_length() then
-            injections[node:id()] = {
-              lang = child:lang(),
-              root = r,
-            }
-          end
-          break
+  parser:for_each_tree(function(parent_tree, parent_ltree)
+    if ignored_injections[parent_ltree:lang()] then
+      return
+    end
+    local parent = parent_tree:root()
+    for _, child in pairs(parent_ltree:children()) do
+      if ignored_injections[child:lang()] then
+        return
+      end
+      for _, tree in pairs(child:trees()) do
+        local r = tree:root()
+        local node = assert(parent:named_descendant_for_range(r:range()))
+        local id = node:id()
+        if not injections[id] or r:byte_length() > injections[id].root:byte_length() then
+          injections[id] = {
+            lang = child:lang(),
+            root = r,
+          }
         end
       end
     end
   end)
+
   return injections
 end
 
@@ -221,7 +224,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         local text = vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {})
         if injections[cur:id()] then
           local injection = injections[cur:id()]
-          traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row, fmt_end_row)
+          traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
+            fmt_end_row)
         elseif cur:named() then
           traverse(bufnr, lines, cur, root, level, lang, injections, fmt_start_row, fmt_end_row)
         else
@@ -233,6 +237,10 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       -- Most likely there needs to have some handling for those named nodes, so try to retrieve the text inbetween the node's range as well
     end
   end
+
+  -- local check_max_width = q["format.indent"][node:id()]["conditional"]
+  local applied_indent_begin = false
+  local applied_indent_newline = false
 
   for child, _ in node:iter_children() do
     local c_srow = child:start()
@@ -255,6 +263,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
     end
     -- If the node is ignored, ignore and write it as is
     -- If node have injections, ignore completely, let the injected tree handle the texts
+    -- Some injected nodes are inside a string range, which will be handled by `format.handle-string above`
+    -- so it should not reach here
     if q["format.remove"][id] then
       goto continue
     end
@@ -269,11 +279,17 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         fmt_end_row)
       goto continue
     end
+    if applied_indent_begin and not applied_indent_newline then
+      -- Defer adding newline until actually reaching a new node that can be reached. 
+      -- If not 
+      applied_indent_newline = true
+      lines[#lines + 1] = string.rep(indent_str, level)
+    end
     -- if q["format.replace"][id] then
     --   lines[#lines] = lines[#lines] .. q["format.replace"][id]
     -- end
     if not q["format.no-prepend"][id] then
-      if q["format.prepend-newline"][id] then
+      if q["format.prepend-newline"][id] and (not fmt_start_row or fmt_start_row < c_srow) then
         lines[#lines + 1] = string.rep(indent_str, level)
       elseif q["format.prepend-space"][id] then
         lines[#lines] = lines[#lines] .. " "
@@ -289,8 +305,12 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       traverse(bufnr, lines, child, root, level, lang, injections, fmt_start_row, fmt_end_row)
     end
     if q["format.indent.begin"][id] then
+      -- if check_max_width then
+      --
+      -- else
+      applied_indent_begin = true
       level = level + 1
-      lines[#lines + 1] = string.rep(indent_str, level)
+      -- end
       goto continue
     end
     if q["format.indent.dedent"][id] then
@@ -301,11 +321,14 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
     end
 
     if q["format.indent.end"][id] then
-      level = math.max(level - 1, 0)
-      -- lines[#lines + 1] = string.rep(indent_str, level)
+      applied_indent_begin = false
+      applied_indent_newline = false
+      if applied_indent_begin then
+        level = math.max(level - 1, 0)
+      end
     end
     if not q["format.no-append"][id] then
-      if q["format.append-newline"][id] then
+      if q["format.append-newline"][id] and (not fmt_end_row or c_erow < fmt_end_row) then
         lines[#lines + 1] = string.rep(indent_str, level)
       elseif q["format.append-space"][id] then
         lines[#lines] = lines[#lines] .. " "
@@ -369,10 +392,12 @@ M.format = function(lnum, count)
       level = level + 1
     end
   end
-  local indent_size = vim.fn.shiftwidth()
-  local indent_str = vim.bo[bufnr].expandtab and string.rep(" ", indent_size) or "\t"
+  local ft_opts = get_ft_opts(bufnr, vim.bo[bufnr].ft)
+  local indent_size = ft_opts.indent_width
+  local indent_str = ft_opts.indent_type == "spaces" and string.rep(" ", indent_size) or "\t"
   lines[#lines] = string.rep(indent_str, level)
   traverse(bufnr, lines, start_node, root, level, parser:lang(), injections, start_row, end_row)
+  vim.print(lines)
   vim.api.nvim_buf_set_lines(bufnr, start_row, start_row + count, false, lines)
   return 0
 end
