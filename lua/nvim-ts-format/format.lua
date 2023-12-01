@@ -240,8 +240,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
   end
 
   -- local check_max_width = q["format.indent"][node:id()]["conditional"]
-  local applied_indent_begin = false
-  local applied_indent_newline = false
+  local apply_indent_begin = false
+  local apply_indent_newline = false
 
   for child, _ in node:iter_children() do
     local c_srow = child:start()
@@ -282,10 +282,10 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
           fmt_end_row)
         break
       end
-      if applied_indent_begin and not applied_indent_newline then
+      if apply_indent_begin and not apply_indent_newline then
         -- Defer adding newline until actually reaching a new node that can be reached.
         -- If not
-        applied_indent_newline = true
+        apply_indent_newline = true
         lines[#lines + 1] = string.rep(indent_str, level)
       end
       -- if q["format.replace"][id] then
@@ -311,7 +311,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         -- if check_max_width then
         --
         -- else
-        applied_indent_begin = true
+        apply_indent_begin = true
         level = level + 1
         -- end
         break
@@ -324,9 +324,9 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       end
 
       if q["format.indent.end"][id] then
-        applied_indent_begin = false
-        applied_indent_newline = false
-        if applied_indent_begin then
+        apply_indent_begin = false
+        apply_indent_newline = false
+        if apply_indent_begin then
           level = math.max(level - 1, 0)
         end
       end
@@ -397,7 +397,6 @@ M.format = function(lnum, count)
   local indent_str = ft_opts.indent_type == "spaces" and string.rep(" ", indent_size) or "\t"
   lines[#lines] = string.rep(indent_str, level)
   traverse(bufnr, lines, start_node, root, level, parser:lang(), injections, start_row, end_row)
-  vim.print(lines)
   vim.api.nvim_buf_set_lines(bufnr, start_row, start_row + count, false, lines)
   return 0
 end
