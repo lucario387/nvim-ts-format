@@ -354,9 +354,6 @@ M.format = function(lnum, count)
     return 1
   end
 
-  -- local ft = vim.filetype.get_option(ft, "filetype")
-  -- local root_lang = ts.language.get_lang(ft) or ft
-
   local start_row = lnum - 1
   local start_col = vim.fn.indent(lnum)
   local end_row = math.max(start_row, vim.fn.prevnonblank(start_row + count - 1))
@@ -395,7 +392,7 @@ M.format = function(lnum, count)
       level = level + 1
     end
   end
-  local ft_opts = get_ft_opts(bufnr, vim.filetype.get_option(ft, "ft"))
+  local ft_opts = get_ft_opts(bufnr, vim.bo[bufnr].filetype)
   local indent_size = ft_opts.indent_width
   local indent_str = ft_opts.indent_type == "spaces" and string.rep(" ", indent_size) or "\t"
   lines[#lines] = string.rep(indent_str, level)
