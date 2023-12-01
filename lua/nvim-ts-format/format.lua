@@ -115,10 +115,11 @@ local get_formats = memoize(
 
 ---@type fun(bufnr: integer, filetype: string): TSFormatFtOpts
 local get_ft_opts = memoize(function(bufnr, ft)
-  return opts[ft] and opts[ft] or opts.default or {
-    indent_type = vim.bo[bufnr].expandtab and "spaces" or "tabs",
-    max_width = 120,
-    indent_width = 2,
+  return opts[ft] and opts[ft] or {
+    indent_type = vim.filetype.get_option(ft, "expandtab") and "spaces" or "tabs",
+    max_width = vim.filetype.get_option(ft, "textwidth"),
+    indent_width = vim.filetype.get_option(ft, "expandtab") and vim.filetype.get_option(ft, "shiftwidth") or
+        vim.filetype.get_option(ft, "tabstop"),
   } --[[@as TSFormatFtOpts]]
 end, function(bufnr, ft)
   return tostring(bufnr) .. ft
@@ -246,97 +247,99 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
     local c_srow = child:start()
     local c_erow = child:end_()
     local id = child:id()
-    if fmt_start_row and c_erow < fmt_start_row then
-      -- This should mean we haven't reach the first line to edit yet, so modify the first line accordingly
-      if q["format.indent.begin"][id] then
-        level = level + 1
-        lines[#lines] = string.rep(indent_str, level)
+    repeat
+      if fmt_start_row and c_erow < fmt_start_row then
+        -- This should mean we haven't reach the first line to edit yet, so modify the first line accordingly
+        if q["format.indent.begin"][id] then
+          level = level + 1
+          lines[#lines] = string.rep(indent_str, level)
+        end
+        if q["format.indent.end"][id] then
+          level = level - 1
+          lines[#lines] = string.rep(indent_str, level)
+        end
+        break
+      elseif fmt_end_row and fmt_end_row < c_srow then
+        -- We go too out of the range to care about. Skip it
+        return
       end
-      if q["format.indent.end"][id] then
-        level = level - 1
-        lines[#lines] = string.rep(indent_str, level)
+      -- If the node is ignored, ignore and write it as is
+      -- If node have injections, ignore completely, let the injected tree handle the texts
+      -- Some injected nodes are inside a string range, which will be handled by `format.handle-string above`
+      -- so it should not reach here
+
+      if q["format.remove"][id] then
+        break
       end
-      goto continue
-    elseif fmt_end_row and fmt_end_row < c_srow then
-      -- We go too out of the range to care about. Skip it
-      return
-    end
-    -- If the node is ignored, ignore and write it as is
-    -- If node have injections, ignore completely, let the injected tree handle the texts
-    -- Some injected nodes are inside a string range, which will be handled by `format.handle-string above`
-    -- so it should not reach here
-    if q["format.remove"][id] then
-      goto continue
-    end
-    if q["format.ignore"][id] then
-      local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
-      local ignored_lines = vim.split(text, "\n+", { trimempty = true })
-      append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][id]["append-newline"] })
-      goto continue
-    elseif injections[id] then
-      local injection = injections[id]
-      traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
-        fmt_end_row)
-      goto continue
-    end
-    if applied_indent_begin and not applied_indent_newline then
-      -- Defer adding newline until actually reaching a new node that can be reached. 
-      -- If not 
-      applied_indent_newline = true
-      lines[#lines + 1] = string.rep(indent_str, level)
-    end
-    -- if q["format.replace"][id] then
-    --   lines[#lines] = lines[#lines] .. q["format.replace"][id]
-    -- end
-    if not q["format.no-prepend"][id] then
-      if q["format.prepend-newline"][id] and (not fmt_start_row or fmt_start_row < c_srow) then
+      if q["format.ignore"][id] then
+        local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
+        local ignored_lines = vim.split(text, "\n+", { trimempty = true })
+        append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][id]["append-newline"] })
+        break
+      elseif injections[id] then
+        local injection = injections[id]
+        traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
+          fmt_end_row)
+        break
+      end
+      if applied_indent_begin and not applied_indent_newline then
+        -- Defer adding newline until actually reaching a new node that can be reached.
+        -- If not
+        applied_indent_newline = true
         lines[#lines + 1] = string.rep(indent_str, level)
-      elseif q["format.prepend-space"][id] then
-        lines[#lines] = lines[#lines] .. " "
       end
-    end
-    if q["format.keep"][id] then
-      append_lines(lines,
-        vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n", { trimempty = true }), {})
-    elseif child:named_child_count() == 0 then
-      append_lines(lines,
-        vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n+", { trimempty = true }), {})
-    else
-      traverse(bufnr, lines, child, root, level, lang, injections, fmt_start_row, fmt_end_row)
-    end
-    if q["format.indent.begin"][id] then
-      -- if check_max_width then
-      --
-      -- else
-      applied_indent_begin = true
-      level = level + 1
+      -- if q["format.replace"][id] then
+      --   lines[#lines] = lines[#lines] .. q["format.replace"][id]
       -- end
-      goto continue
-    end
-    if q["format.indent.dedent"][id] then
-      if string.match(lines[#lines], "^%s*" .. get_node_text(child, bufnr)) then
-        local amount = tonumber(q["format.indent.dedent"][id]["amount"]) or 1
-        lines[#lines] = string.sub(lines[#lines], 1 + #string.rep(indent_str, amount))
+      if not q["format.no-prepend"][id] then
+        if q["format.prepend-newline"][id] and (not fmt_start_row or fmt_start_row < c_srow) then
+          lines[#lines + 1] = string.rep(indent_str, level)
+        elseif q["format.prepend-space"][id] then
+          lines[#lines] = lines[#lines] .. " "
+        end
       end
-    end
+      if q["format.keep"][id] then
+        append_lines(lines,
+          vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n", { trimempty = true }), {})
+      elseif child:named_child_count() == 0 then
+        append_lines(lines,
+          vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n+", { trimempty = true }), {})
+      else
+        traverse(bufnr, lines, child, root, level, lang, injections, fmt_start_row, fmt_end_row)
+      end
+      if q["format.indent.begin"][id] then
+        -- if check_max_width then
+        --
+        -- else
+        applied_indent_begin = true
+        level = level + 1
+        -- end
+        break
+      end
+      if q["format.indent.dedent"][id] then
+        if string.match(lines[#lines], "^%s*" .. get_node_text(child, bufnr)) then
+          local amount = tonumber(q["format.indent.dedent"][id]["amount"]) or 1
+          lines[#lines] = string.sub(lines[#lines], 1 + #string.rep(indent_str, amount))
+        end
+      end
 
-    if q["format.indent.end"][id] then
-      applied_indent_begin = false
-      applied_indent_newline = false
-      if applied_indent_begin then
-        level = math.max(level - 1, 0)
+      if q["format.indent.end"][id] then
+        applied_indent_begin = false
+        applied_indent_newline = false
+        if applied_indent_begin then
+          level = math.max(level - 1, 0)
+        end
       end
-    end
-    if not q["format.no-append"][id] then
-      if q["format.append-newline"][id] and (not fmt_end_row or c_erow < fmt_end_row) then
-        lines[#lines + 1] = string.rep(indent_str, level)
-      elseif q["format.append-space"][id] then
-        lines[#lines] = lines[#lines] .. " "
+      if not q["format.no-append"][id] then
+        if q["format.append-newline"][id] and (not fmt_end_row or c_erow < fmt_end_row) then
+          lines[#lines + 1] = string.rep(indent_str, level)
+        elseif q["format.append-space"][id] then
+          lines[#lines] = lines[#lines] .. " "
+        end
       end
-    end
-    -- Append stuffs
-
-    ::continue::
+      break
+      -- Append stuffs
+    until false
   end
 end
 
@@ -351,7 +354,7 @@ M.format = function(lnum, count)
     return 1
   end
 
-  -- local ft = vim.bo[bufnr].filetype
+  -- local ft = vim.filetype.get_option(ft, "filetype")
   -- local root_lang = ts.language.get_lang(ft) or ft
 
   local start_row = lnum - 1
@@ -392,7 +395,7 @@ M.format = function(lnum, count)
       level = level + 1
     end
   end
-  local ft_opts = get_ft_opts(bufnr, vim.bo[bufnr].ft)
+  local ft_opts = get_ft_opts(bufnr, vim.filetype.get_option(ft, "ft"))
   local indent_size = ft_opts.indent_width
   local indent_str = ft_opts.indent_type == "spaces" and string.rep(" ", indent_size) or "\t"
   lines[#lines] = string.rep(indent_str, level)

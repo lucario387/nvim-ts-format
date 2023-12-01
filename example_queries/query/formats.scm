@@ -92,3 +92,5 @@
     "."
   ] @format.append-newline
   (_) .) @format.indent
+
+(comment) @format.append-newline
