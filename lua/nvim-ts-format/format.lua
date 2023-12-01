@@ -321,6 +321,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
           local amount = tonumber(q["format.indent.dedent"][id]["amount"]) or 1
           lines[#lines] = string.sub(lines[#lines], 1 + #string.rep(indent_str, amount))
         end
+      elseif q["format.indent.zero"][id] and string.match(lines[#lines], "^%s*" ..get_node_text(child, bufnr)) then
+        lines[#lines] = string.match(lines[#lines], "^%s*(.*)")
       end
 
       if q["format.indent.end"][id] then
