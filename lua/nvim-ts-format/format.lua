@@ -205,10 +205,10 @@ local get_injections = memoize(
 --- @param fmt_end_row? integer
 local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_start_row, fmt_end_row)
   local q = get_formats(bufnr, root, lang)
-  local ft = vim.bo[bufnr].filetype
-  local ft_opts = get_ft_opts(bufnr, ft)
+  local ft_opts = get_ft_opts(bufnr, vim.bo[bufnr].ft)
   local indent_size = ft_opts.indent_width
   local indent_str = ft_opts.indent_type == "spaces" and string.rep(" ", indent_size) or "\t"
+  local max_width = ft_opts.max_width
 
   -- TODO: Need to handle custom injection cases
   -- Learn how to clip into injected ranges
@@ -251,9 +251,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
     end
   end
 
-  -- local check_max_width = q["format.indent"][node:id()]["conditional"]
   local apply_indent_begin = false
-  local apply_indent_newline = false
+  local apply_newline = false
 
   for child, _ in node:iter_children() do
     local c_srow = child:start()
@@ -283,10 +282,10 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       if q["format.remove"][id] then
         break
       end
-      if apply_indent_begin and not apply_indent_newline then
+      if apply_newline then
         -- Defer adding newline until actually reaching a new node that can be reached.
         -- If not
-        apply_indent_newline = true
+        apply_newline = false
         lines[#lines + 1] = string.rep(indent_str, level)
       end
       if q["format.ignore"][id] then
@@ -304,7 +303,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       --   lines[#lines] = lines[#lines] .. q["format.replace"][id]
       -- end
       if not q["format.cancel-prepend"][id] then
-        if q["format.prepend-newline"][id] and (not fmt_start_row or fmt_start_row < c_srow) then
+        if q["format.prepend-newline"][id] and (not fmt_start_row or fmt_start_row <= c_srow) then
           lines[#lines + 1] = string.rep(indent_str, level)
         elseif q["format.prepend-space"][id] then
           lines[#lines] = lines[#lines] .. " "
@@ -318,9 +317,16 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       end
       if q["format.indent.begin"][id] then
         if max_width and q["format.indent.begin"][id]["conditional"] then
-
+          local _, _, c_sbyte = child:start()
+          local _, _, sbyte = node:start()
+          if node:byte_length() + sbyte - c_sbyte > max_width then
+            apply_indent_begin = true
+            apply_newline = true
+            level = level + 1
+          end
         else
           apply_indent_begin = true
+          apply_newline = true
           level = level + 1
         end
         break
@@ -335,15 +341,15 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       end
 
       if q["format.indent.end"][id] then
-        apply_indent_begin = false
-        apply_indent_newline = false
         if apply_indent_begin then
           level = math.max(level - 1, 0)
         end
+        apply_indent_begin = false
+        apply_newline = false
       end
       if not q["format.cancel-append"][id] then
-        if q["format.append-newline"][id] and (not fmt_end_row or c_erow < fmt_end_row) then
-          lines[#lines + 1] = string.rep(indent_str, level)
+        if q["format.append-newline"][id] and (not fmt_end_row or c_erow <= fmt_end_row) then
+          apply_newline = true
         elseif q["format.append-space"][id] then
           lines[#lines] = lines[#lines] .. " "
         end
