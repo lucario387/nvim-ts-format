@@ -15,9 +15,8 @@ Write your own formatter and `formatexpr` for any language, made easy with Tree-
 
 ### Usage
 
-Users are expected to either
-- Use the command `:TSFormatBuf` to format the entire buf's content
-- Or manually set `formatexpr` for certain filetypes that they want to use, for example, enabling for json and C
+- Create some queries for a certain language, using the captures listed below, save it as `queries/{lang}/formats.scm`. For r C, it's `queries/c/formats.scm`, for `*.js` files it will be `queries/javascript/formats.scm`.
+- Set `formatexpr` for certain filetypes that they want to use, for example, enabling for json and C
 ```lua
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "json", "c" },
