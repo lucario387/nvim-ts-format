@@ -288,7 +288,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         apply_newline = false
         lines[#lines + 1] = string.rep(indent_str, level)
       end
-      if q["format.ignore"][id] then
+      if q["format.ignore"][id] or child:type() == "ERROR" then
         local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
         local ignored_lines = vim.split(text, "\n", { trimempty = true })
         append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][id]["append-newline"] })
