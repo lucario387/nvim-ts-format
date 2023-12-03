@@ -16,10 +16,16 @@
 (self_closing_tag
   (tag_name)
   (_) @format.prepend-space)
+(self_closing_tag
+  (tag_name) @format.indent.begin
+  (#set! "format.conditional"))
 
 (start_tag
   (tag_name)
   (_) @format.prepend-space)
+(start_tag
+  (tag_name) @format.indent.begin
+  (#set! "format.conditional"))
 
 (comment) @format.append-newline
 

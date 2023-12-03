@@ -2,11 +2,11 @@
 (template_element
   (start_tag) @format.indent.begin
   (end_tag
-    ">") @format.indent.dedent @format.indent.end @format.append-newline)
+    ">") @format.indent.dedent @format.append-newline)
 
 (interpolation
   "{{" @format.indent.begin
-  "}}" @format.indent.end @format.indent.dedent) @format.append-newline
+  "}}" @format.indent.dedent) @format.append-newline
 
 ((text) @format.remove
   (#lua-match? @format.remove "^%s*$"))

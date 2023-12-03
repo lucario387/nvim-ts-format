@@ -3,7 +3,7 @@
   (_) @format.append-newline)
 
 (program
-  (_) @format.no-append .)
+  (_) @format.cancel-append .)
 
 (program
   (_) @_che
@@ -17,7 +17,7 @@
 ] @format.append-space
 
 (
-  "." @format.prepend-space @format.no-append
+  "." @format.prepend-space @format.cancel-append
   .
   ")")
 
@@ -28,7 +28,7 @@
 (list
   "[" @format.remove
   .
-  (_) @format.no-append
+  (_) @format.cancel-append
   .
   "]" @format.remove)
 
@@ -60,7 +60,7 @@
     "_"
     name: (identifier)
   ] @format.indent.begin
-  (_) @format.no-append
+  (_) @format.cancel-append
   .
   ")")
 

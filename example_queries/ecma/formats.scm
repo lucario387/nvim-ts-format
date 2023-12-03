@@ -27,7 +27,9 @@
   . (_) .) @format.ignore
 
 
-(template_string) @format.handle-string
+; (template_string) @format.handle-string
+; ((template_substitution) @format.indent.begin
+;   (#set! @format.indent.begin format.conditional))
 
 [
   "let"
@@ -62,6 +64,10 @@
   "default"
   "function"
 ] @format.append-space
+
+[
+  "from"
+] @format.prepend-space
 
 [
   ; Operators
@@ -113,4 +119,4 @@
 
 (program
   .
-  (_) @format.no-append @format.no-prepend .)
+  (_) @format.cancel-append @format.cancel-prepend .)

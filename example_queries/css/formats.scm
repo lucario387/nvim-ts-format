@@ -9,12 +9,12 @@
 [
   (plain_value)
   (integer_value)
-] @format.handle-string
+] @format.keep
 
 (stylesheet
   (rule_set) @format.append-newline)
 (stylesheet
-  (declaration) @format.no-append)
+  (declaration) @format.cancel-append)
 
 (selectors
   "," @format.append-newline)
