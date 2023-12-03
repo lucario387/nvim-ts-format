@@ -16,7 +16,8 @@ Write your own formatter and `formatexpr` for any language, made easy with Tree-
 ### Usage
 
 - Create some queries for a certain language, using the captures listed below, save it as `queries/{lang}/formats.scm`. For r C, it's `queries/c/formats.scm`, for `*.js` files it will be `queries/javascript/formats.scm`.
-- Set `formatexpr` for certain filetypes that they want to use, for example, enabling for json and C
+  - Set `formatexpr` for certain filetypes that they want to use, for example, enabling for json and C
+  - Use `require('nvim-ts-format').format_buf(bufnr)` to fully a buffer
 ```lua
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "json", "c" },
@@ -77,7 +78,9 @@ Example: Ignoring nodes in between a comment with `start-ignore` and `end-ignore
 
 (
   (comment) @_start
+  .
   (_) @format.ignore
+  .
   (comment) @_end
   (#lua-match? @_start "start%-ignore")
   (#lua-match? @_end "end%-ignore")
@@ -96,8 +99,8 @@ Most used: Keep the content of a string
 
 - `@format.indent.begin`: Has 2 usages
   - Adds an extra indentation level to all nodes after it that's under the same parent. Also inserts a newline
-  - With a directive `(#set! conditional)`, this will instead be used to conditionally add newlines if it deems there's too many 
-  check for maxwidth and clump all to a line or not by doing `(#set! conditional)`. By default it always add a new line.
+  - With a directive `(#set! format.conditional)`, this will instead be used to conditionally add newlines if it deems there's too many 
+  check for maxwidth and clump all to a line or not by doing `(#set! format.conditional)`. By default it always add a new line.
 - `@format.indent.end`: Subtracts an extra indentation level to all nodes after it that's under the same parent. Usage is rarely needed, but this is kept for certain languages/scopes configurations.
 - `@format.indent`: Used only for calculating indentation level while handling certain sections of the file, unused if formatting the entire file.You can ignore this.
 
@@ -144,10 +147,26 @@ i.e. `#ifdef` in C
 ] @format.indent.zero
 ```
 
+Example: For a C code of
+```c
+int main(){
+  #define FOO BAR
+}
+```
+
+will become
+```c
+int main() {
+#define FOO BAR
+}
+```
+
 
 #### `@format.append-newline`, `@format.append-space`, `@format.cancel-append`
 
 Append newlines/spaces, or ignore it
+
+`@format.append-newline` will take precedence over `@format.append-space`
 
 Example: Adding newlines after each statement in C, and spaces after keywords and 
 ```query
@@ -171,6 +190,7 @@ int main(){
 
 Prepend newlines/spaces, or ignore it for certain combinations
 
+`@format.prepend-newline` will take precedence over `@format.prepend-space`
 
 
 ### 
