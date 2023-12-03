@@ -117,7 +117,7 @@ local get_formats = memoize(
 local get_ft_opts = memoize(function(bufnr, ft)
   return configs[ft] and configs[ft] or {
     indent_type = vim.filetype.get_option(ft, "expandtab") and "spaces" or "tabs",
-    max_width = vim.filetype.get_option(ft, "textwidth") ~= 0 or
+    max_width = vim.filetype.get_option(ft, "textwidth") ~= 0 and
     vim.filetype.get_option(ft, "textwidth") --[[@as integer]] or nil,
     indent_width = vim.filetype.get_option(ft, "expandtab") and
         vim.filetype.get_option(ft, "shiftwidth") --[[@as integer]] or
@@ -201,8 +201,8 @@ local get_injections = memoize(
 --- @param level integer indent level for current line
 --- @param lang string language of the current tsnode tree being iterated over
 --- @param injections table<string, InjectionTree> Mapping of node ids to root nodes of injected language trees
---- @param fmt_start_row? integer
---- @param fmt_end_row? integer
+--- @param fmt_start_row? integer Limit the formatting range to nodes with start row not smaller than fmt_start_row
+--- @param fmt_end_row? integer Limit the formatting range to nodes whose end row is not larger than fmt_end_row
 local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_start_row, fmt_end_row)
   local q = get_formats(bufnr, root, lang)
   local ft_opts = get_ft_opts(bufnr, vim.bo[bufnr].ft)
@@ -212,47 +212,58 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
 
   -- TODO: Need to handle custom injection cases
   -- Learn how to clip into injected ranges
-  if q["format.handle-string"][node:id()] then
-    if node:named_child_count() == 0 then
-      local text = get_node_text(node, bufnr):gsub("\r\n", "\n")
-      local ignored_lines = vim.split(text, "\n+", { trimempty = true })
-      append_lines(lines, ignored_lines, {})
-      lines[#lines] = string.rep(indent_str, level)
-      -- immediately split + handle the string
-    else
-      local start_row, start_col = node:start()
-      local end_row, end_col = node:child(0):start()
-      if start_col < end_col then
-        append_lines(lines, vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {}), {})
-      end
-      for i = 0, node:child_count() - 1, 1 do
-        local cur = node:child(i) --[[@as TSNode]]
-        local next = node:child(i + 1) --[[@as TSNode]]
-        start_row, start_col = cur:end_()
-        if i == node:child_count() - 1 then
-          end_row, end_col = node:end_()
-        else
-          end_row, end_col = next:start()
-        end
-        local text = vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {})
-        if injections[cur:id()] then
-          local injection = injections[cur:id()]
-          traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
-            fmt_end_row)
-        elseif cur:named() then
-          traverse(bufnr, lines, cur, root, level, lang, injections, fmt_start_row, fmt_end_row)
-        else
-          lines[#lines] = lines[#lines] .. cur:type()
-        end
-        append_lines(lines, text, {})
-      end
-      return
-      -- Most likely there needs to have some handling for those named nodes, so try to retrieve the text inbetween the node's range as well
-    end
-  end
+  -- if q["format.handle-string"][node:id()] then
+  --   if injections[node:id()] then
+  --     local root = injections[node:id()].root
+  --     local r_srow, r_scol, r_sbyte = root:start()
+  --     local r_erow, r_ecol, r_ebyte = root:end_()
+  --     local srow, scol = node:start()
+  --     return
+  --   end
+  --   if node:named_child_count() == 0 then
+  --     local text = get_node_text(node, bufnr):gsub("\r\n", "\n")
+  --     local ignored_lines = vim.split(text, "\n+", { trimempty = true })
+  --     append_lines(lines, ignored_lines, {})
+  --     lines[#lines] = string.rep(indent_str, level)
+  --     -- immediately split + handle the string
+  --   else
+  --     local start_row, start_col = node:start()
+  --     local end_row, end_col = node:child(0):start()
+  --     if start_col < end_col then
+  --       append_lines(lines, vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {}), {})
+  --     end
+  --     for i = 0, node:child_count() - 1, 1 do
+  --       local cur = node:child(i) --[[@as TSNode]]
+  --       local next = node:child(i + 1) --[[@as TSNode]]
+  --       start_row, start_col = cur:end_()
+  --       if i == node:child_count() - 1 then
+  --         end_row, end_col = node:end_()
+  --       else
+  --         end_row, end_col = next:start()
+  --       end
+  --       local text = vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {})
+  --       if injections[cur:id()] then
+  --         local injection = injections[cur:id()]
+  --         traverse(bufnr, lines, injection.root, injection.root, level, injection.lang, injections, fmt_start_row,
+  --           fmt_end_row)
+  --       elseif cur:named() then
+  --         traverse(bufnr, lines, cur, root, level, lang, injections, fmt_start_row, fmt_end_row)
+  --       else
+  --         lines[#lines] = lines[#lines] .. cur:type()
+  --       end
+  --       append_lines(lines, text, {})
+  --     end
+  --     return
+  --     -- Most likely there needs to have some handling for those named nodes, so try to retrieve the text inbetween the node's range as well
+  --   end
+  -- end
 
+  ---@type boolean?
   local apply_indent_begin = false
+  ---@type boolean?
   local apply_newline = false
+  ---@type boolean?
+  local has_conditional_indent = false
 
   for child, _ in node:iter_children() do
     local c_srow = child:start()
@@ -288,7 +299,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         apply_newline = false
         lines[#lines + 1] = string.rep(indent_str, level)
       end
-      if q["format.ignore"][id] or child:type() == "ERROR" then
+      if q["format.ignore"][id] or (child:type() == "ERROR" and child:named_child_count() == 0) then
+        -- Just ignore ERROR nodes to be safe
         local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
         local ignored_lines = vim.split(text, "\n", { trimempty = true })
         append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][id]["append-newline"] })
@@ -299,16 +311,20 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
           fmt_end_row)
         break
       end
-      -- if q["format.replace"][id] then
-      --   lines[#lines] = lines[#lines] .. q["format.replace"][id]
-      -- end
       if not q["format.cancel-prepend"][id] then
         if q["format.prepend-newline"][id] and (not fmt_start_row or fmt_start_row <= c_srow) then
           lines[#lines + 1] = string.rep(indent_str, level)
         elseif q["format.prepend-space"][id] then
-          lines[#lines] = lines[#lines] .. " "
+          if has_conditional_indent and apply_indent_begin then
+            apply_newline = true
+          else
+            lines[#lines] = lines[#lines] .. " "
+          end
         end
       end
+      -- if q["format.handle-string"][id] then
+      --   traverse(bufnr, lines, child, root, level, lang, injections, fmt_start_row, fmt_end_row)
+      -- else
       if child:named_child_count() == 0 or q["format.keep"][id] then
         append_lines(lines,
           vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n+", { trimempty = true }), {})
@@ -316,13 +332,24 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         traverse(bufnr, lines, child, root, level, lang, injections, fmt_start_row, fmt_end_row)
       end
       if q["format.indent.begin"][id] then
-        if max_width and q["format.indent.begin"][id]["conditional"] then
-          local _, _, c_sbyte = child:start()
-          local _, _, sbyte = node:start()
-          if node:byte_length() + sbyte - c_sbyte > max_width then
-            apply_indent_begin = true
-            apply_newline = true
-            level = level + 1
+        if max_width and q["format.indent.begin"][id]["format.conditional"] then
+          has_conditional_indent = q["format.indent.begin"][id]["format.conditional"] or nil
+          if has_conditional_indent then
+            has_conditional_indent = true
+            local _, _, c_sbyte = child:start()
+            local _, _, sbyte = node:start()
+            if math.max(0, max_width - #lines[#lines]) < node:byte_length() + sbyte - c_sbyte then
+              apply_indent_begin = true
+              apply_newline = true
+              level = level + 1
+              q["format.indent.begin"][id]["format.conditional"] = false
+            else
+              apply_indent_begin = false
+              apply_newline = false
+            end
+          elseif has_conditional_indent == false then
+            has_conditional_indent = true
+            break
           end
         else
           apply_indent_begin = true
@@ -344,14 +371,16 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         if apply_indent_begin then
           level = math.max(level - 1, 0)
         end
-        apply_indent_begin = false
-        apply_newline = false
+        if has_conditional_indent then
+          has_conditional_indent = false
+        end
+        apply_indent_begin = nil
       end
       if not q["format.cancel-append"][id] then
         if q["format.append-newline"][id] and (not fmt_end_row or c_erow <= fmt_end_row) then
           apply_newline = true
         elseif q["format.append-space"][id] then
-          lines[#lines] = lines[#lines] .. " "
+            lines[#lines] = lines[#lines] .. " "
         end
       end
       break
