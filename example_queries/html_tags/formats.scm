@@ -18,6 +18,7 @@
   (_) @format.prepend-space)
 (self_closing_tag
   (tag_name) @format.indent.begin
+  "/>" @format.indent.end
   (#set! "format.conditional"))
 
 (start_tag
@@ -25,17 +26,18 @@
   (_) @format.prepend-space)
 (start_tag
   (tag_name) @format.indent.begin
+  ">" @format.indent.end
   (#set! "format.conditional"))
 
 (comment) @format.append-newline
 
 (script_element
   (start_tag) @format.append-newline
-  (end_tag) @format.prepend-newline @format.append-newline)
+  (end_tag) @format.prepend-newline) @format.append-newline
 
 (style_element
   (start_tag) @format.append-newline
-  (end_tag) @format.append-newline)
+  (end_tag) @format.append-newline) @format.append-newline
 
 (element
   (start_tag

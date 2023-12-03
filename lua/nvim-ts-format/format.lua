@@ -333,23 +333,18 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       end
       if q["format.indent.begin"][id] then
         if max_width and q["format.indent.begin"][id]["format.conditional"] then
-          has_conditional_indent = q["format.indent.begin"][id]["format.conditional"] or nil
-          if has_conditional_indent then
-            has_conditional_indent = true
-            local _, _, c_sbyte = child:start()
-            local _, _, sbyte = node:start()
-            if math.max(0, max_width - #lines[#lines]) < node:byte_length() + sbyte - c_sbyte then
-              apply_indent_begin = true
-              apply_newline = true
-              level = level + 1
-              q["format.indent.begin"][id]["format.conditional"] = false
-            else
-              apply_indent_begin = false
-              apply_newline = false
-            end
-          elseif has_conditional_indent == false then
-            has_conditional_indent = true
-            break
+          has_conditional_indent = true
+          local _, _, c_sbyte = child:start()
+          local _, _, sbyte = node:start()
+          if math.max(0, max_width - #lines[#lines]) < node:byte_length() + sbyte - c_sbyte then
+            apply_indent_begin = true
+            apply_newline = true
+            level = level + 1
+            q["format.indent.begin"][id]["format.conditional"] = true
+          else
+            q["format.indent.begin"][id]["format.conditional"] = false
+            apply_indent_begin = false
+            apply_newline = false
           end
         else
           apply_indent_begin = true
@@ -360,7 +355,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       end
       if q["format.indent.dedent"][id] then
         if string.match(lines[#lines], "^%s*" .. get_node_text(child, bufnr)) then
-          local amount = tonumber(q["format.indent.dedent"][id]["amount"]) or 1
+          local amount = tonumber(q["format.indent.dedent"][id]["format.amount"]) or 1
           lines[#lines] = string.sub(lines[#lines], 1 + #string.rep(indent_str, amount))
         end
       elseif q["format.indent.zero"][id] and string.match(lines[#lines], "^%s*" .. get_node_text(child, bufnr)) then
@@ -373,14 +368,17 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         end
         if has_conditional_indent then
           has_conditional_indent = false
+          if string.match(lines[#lines], "^%s*" .. get_node_text(child, bufnr)) then
+            lines[#lines] = string.sub(lines[#lines], 1 + #string.rep(indent_str, 1))
+          end
         end
         apply_indent_begin = nil
       end
       if not q["format.cancel-append"][id] then
         if q["format.append-newline"][id] and (not fmt_end_row or c_erow <= fmt_end_row) then
-          apply_newline = true
+          lines[#lines + 1] = string.rep(indent_str, level)
         elseif q["format.append-space"][id] then
-            lines[#lines] = lines[#lines] .. " "
+          lines[#lines] = lines[#lines] .. " "
         end
       end
       break

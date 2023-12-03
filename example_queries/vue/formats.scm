@@ -2,7 +2,7 @@
 (template_element
   (start_tag) @format.indent.begin
   (end_tag
-    ">") @format.indent.dedent @format.append-newline)
+    ">") @format.indent.dedent) @format.append-newline
 
 (interpolation
   "{{" @format.indent.begin
