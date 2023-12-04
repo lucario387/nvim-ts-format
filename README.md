@@ -75,7 +75,6 @@ These captures will try to keep the content as is.
 Example: Ignoring nodes in between a comment with `start-ignore` and `end-ignore`
 
 ```query
-
 (
   (comment) @_start
   .
@@ -113,26 +112,18 @@ These captures only take effects if the node is in a line with only whitespaces/
 Example: Usage in C
 
 ```query
-; With @format.indent.dedent, we get this code:
-; {
-;   some_code;
-; }
-; Without
-; {
-;     some_code;
-;     }
 (compound_statement
   "{" @format.indent.begin
   "}" @format.indent.dedent)
 ```
 
-```c
-// From the code 
-{ some_code; }
-// The query above will lead to
-{
-  some_code;
-}
+We will get this code before and after formatting
+
+```diff
+-{ some_code; }
++{
++  some_code;
++}
 ```
 
 - `@format.indent.zero`: Remove all prefixing whitespace/tabs from current line if this is the 
@@ -147,17 +138,11 @@ i.e. `#ifdef` in C
 ] @format.indent.zero
 ```
 
-Example: For a C code of
-```c
+Example: The C code below after applying the format
+```diff
 int main(){
-  #define FOO BAR
-}
-```
-
-will become
-```c
-int main() {
-#define FOO BAR
+-  #define FOO BAR
++#define FOO BAR
 }
 ```
 
