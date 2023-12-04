@@ -7,7 +7,7 @@ Write your own formatter and `formatexpr` for any language, made easy with Tree-
 - Using [lazy.nvim]
 ```lua
   { 
-    "lucario387/nvim-ts-format" 
+    "lucario387/nvim-ts-format",
     dependencies = { "nvim-treesitter/nvim-treesitter" },
   }
 ```
