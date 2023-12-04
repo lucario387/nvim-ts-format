@@ -281,15 +281,18 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
             local _, _, c_sbyte = child:start()
             local _, _, sbyte = node:start()
             if max_width > node:byte_length() + sbyte - c_sbyte + (level * indent_size) then
+              has_conditional_indent = false
               level = level - 1
               lines[#lines] = string.rep(indent_str, level)
             end
           end
         end
         if q["format.indent.end"][id] then
-          level = level - 1
-          has_conditional_indent = false
-          lines[#lines] = string.rep(indent_str, level)
+          if not has_conditional_indent == false then
+            level = level - 1
+            has_conditional_indent = false
+            lines[#lines] = string.rep(indent_str, level)
+          end
         end
         break
       elseif fmt_end_row and fmt_end_row < c_srow then
@@ -327,7 +330,9 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
           lines[#lines + 1] = string.rep(indent_str, level)
         elseif q["format.prepend-space"][id] then
           if has_conditional_indent and apply_indent_begin then
-            apply_newline = true
+            if not lines[#lines]:match("^%s*$") then
+              lines[#lines + 1] = string.rep(indent_str, level)
+            end
           else
             lines[#lines] = lines[#lines] .. " "
           end
@@ -352,6 +357,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
             apply_newline = true
             level = level + 1
             q["format.indent.begin"][id]["format.conditional"] = true
+            break
           else
             q["format.indent.begin"][id]["format.conditional"] = false
             apply_indent_begin = false
@@ -361,8 +367,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
           apply_indent_begin = true
           apply_newline = true
           level = level + 1
+          break
         end
-        break
       end
       if q["format.indent.dedent"][id] then
         if string.match(lines[#lines], "^%s*" .. get_node_text(child, bufnr)) then
