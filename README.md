@@ -100,6 +100,7 @@ Most used: Keep the content of a string
   - Adds an extra indentation level to all nodes after it that's under the same parent. Also inserts a newline
   - With a directive `(#set! format.conditional)`, this will instead be used to conditionally add newlines if it deems there's too many 
   check for maxwidth and clump all to a line or not by doing `(#set! format.conditional)`. By default it always add a new line.
+    - This will not take effect if `:h textwidth` is not set. It will fully ignore those indents.
 - `@format.indent.end`: Subtracts an extra indentation level to all nodes after it that's under the same parent. Usage is rarely needed, but this is kept for certain languages/scopes configurations.
 - `@format.indent`: Used only for calculating indentation level while handling certain sections of the file, unused if formatting the entire file.You can ignore this.
 
