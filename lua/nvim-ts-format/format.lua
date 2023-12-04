@@ -114,7 +114,7 @@ local get_formats = memoize(
 )
 
 ---@type fun(bufnr: integer, filetype: string): TSFormatFtOpts
-local get_ft_opts = memoize(function(bufnr, ft)
+local get_ft_opts = memoize(function(_, ft)
   return configs[ft] and configs[ft] or {
     indent_type = vim.filetype.get_option(ft, "expandtab") and "spaces" or "tabs",
     max_width = vim.filetype.get_option(ft, "textwidth") ~= 0 and
@@ -273,11 +273,22 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       if fmt_start_row and c_erow < fmt_start_row then
         -- This should mean we haven't reach the first line to edit yet, so modify the first line accordingly
         if q["format.indent.begin"][id] then
-          level = level + 1
-          lines[#lines] = string.rep(indent_str, level)
+          has_conditional_indent = q["format.indent.begin"][id]["format.conditional"]
+          if has_conditional_indent == nil then
+            level = level + 1
+            lines[#lines] = string.rep(indent_str, level)
+          else
+            local _, _, c_sbyte = child:start()
+            local _, _, sbyte = node:start()
+            if max_width > node:byte_length() + sbyte - c_sbyte + (level * indent_size) then
+              level = level - 1
+              lines[#lines] = string.rep(indent_str, level)
+            end
+          end
         end
         if q["format.indent.end"][id] then
           level = level - 1
+          has_conditional_indent = false
           lines[#lines] = string.rep(indent_str, level)
         end
         break
