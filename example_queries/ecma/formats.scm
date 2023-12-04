@@ -28,8 +28,10 @@
 
 
 ; (template_string) @format.handle-string
-; ((template_substitution) @format.indent.begin
-;   (#set! @format.indent.begin format.conditional))
+(template_substitution
+   "${" @format.indent.begin @format.append-space
+   "}" @format.prepend-space @format.indent.end
+  (#set! format.conditional))
 
 [
   "let"
