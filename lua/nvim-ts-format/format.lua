@@ -315,7 +315,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       end
       if q["format.ignore"][id] or (child:type() == "ERROR" and child:named_child_count() == 0) then
         -- Just ignore ERROR nodes to be safe
-        local text = get_node_text(child, bufnr):gsub("\r\n", "\n")
+        local text = get_node_text(child, bufnr):gsub("\r\n?", "\n")
         local ignored_lines = vim.split(text, "\n", { trimempty = true })
         append_lines(lines, ignored_lines, { append_newline = q["format.ignore"][id]["append-newline"] })
         break
@@ -343,7 +343,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
       -- else
       if child:named_child_count() == 0 or q["format.keep"][id] then
         append_lines(lines,
-          vim.split(string.gsub(get_node_text(child, bufnr), "\r\n", "\n"), "\n+", { trimempty = true }), {})
+          vim.split(string.gsub(get_node_text(child, bufnr), "\r\n?", "\n"), "\n+", { trimempty = true }), {})
       else
         traverse(bufnr, lines, child, root, level, lang, injections, fmt_start_row, fmt_end_row)
       end
@@ -363,10 +363,13 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
             apply_indent_begin = false
             apply_newline = false
           end
+          break
         else
-          apply_indent_begin = true
-          apply_newline = true
-          level = level + 1
+          if not q["format.indent.begin"][id]["format.conditional"] then
+            apply_indent_begin = true
+            apply_newline = true
+            level = level + 1
+          end
           break
         end
       end
@@ -391,6 +394,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
         end
         apply_indent_begin = nil
       end
+    until true
+    repeat
       if not q["format.cancel-append"][id] then
         if q["format.append-newline"][id] and (not fmt_end_row or c_erow <= fmt_end_row) then
           lines[#lines + 1] = string.rep(indent_str, level)
@@ -398,9 +403,8 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
           lines[#lines] = lines[#lines] .. " "
         end
       end
-      break
       -- Append stuffs
-    until false
+    until true
   end
 end
 
