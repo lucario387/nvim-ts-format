@@ -357,7 +357,6 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
             apply_newline = true
             level = level + 1
             q["format.indent.begin"][id]["format.conditional"] = true
-            break
           else
             q["format.indent.begin"][id]["format.conditional"] = false
             apply_indent_begin = false
@@ -397,7 +396,7 @@ local function traverse(bufnr, lines, node, root, level, lang, injections, fmt_s
     until true
     repeat
       if not q["format.cancel-append"][id] then
-        if q["format.append-newline"][id] and (not fmt_end_row or c_erow <= fmt_end_row) then
+        if q["format.append-newline"][id] and ((not fmt_end_row and not fmt_end_row) or (fmt_start_row <= c_srow and c_erow <= fmt_end_row)) then
           lines[#lines + 1] = string.rep(indent_str, level)
         elseif q["format.append-space"][id] then
           lines[#lines] = lines[#lines] .. " "
