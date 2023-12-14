@@ -461,6 +461,13 @@ M.format = function(lnum, count)
   local indent_str = ft_opts.indent_type == "spaces" and string.rep(" ", indent_size) or "\t"
   lines[#lines] = string.rep(indent_str, level)
   traverse(bufnr, lines, start_node, root, level, parser:lang(), injections, start_row, end_row)
+  while true do
+    if string.match(lines[#lines], "^%s*$") then
+      table.remove(lines, #lines)
+    else
+      break
+    end
+  end
   vim.api.nvim_buf_set_lines(bufnr, start_row, start_row + count, false, lines)
   return 0
 end
