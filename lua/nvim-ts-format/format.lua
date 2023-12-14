@@ -462,7 +462,7 @@ M.format = function(lnum, count)
   lines[#lines] = string.rep(indent_str, level)
   traverse(bufnr, lines, start_node, root, level, parser:lang(), injections, start_row, end_row)
   while true do
-    if string.match(lines[#lines], "^%s*$") then
+    if #lines > 0 and string.match(lines[#lines], "^%s*$") then
       table.remove(lines, #lines)
     else
       break
