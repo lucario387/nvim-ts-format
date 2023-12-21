@@ -424,10 +424,10 @@ M.format = function(lnum, count)
   local end_col = #(vim.api.nvim_buf_get_lines(bufnr, end_row, end_row + 1, false)[1] or "") - 1
 
   -- Not optimal, but for this we need the most up-to-date language tree possible
-  local root = parser:parse({ start_row, end_row })[1]:root()
+  local root = parser:parse({ start_row, end_row + 1 })[1]:root()
   local injections = get_injections(parser, root, bufnr)
 
-  local start_node = root:descendant_for_range(start_row, start_col, end_row, end_col) --[[@as TSNode]]
+  local start_node = root:descendant_for_range(start_row, start_col, end_row, end_col + 1) --[[@as TSNode]]
   local whole_file = lnum == 1 and (vim.fn.line("$") == lnum + count - 1)
   local lines = { "" }
 
@@ -488,6 +488,13 @@ M.format_buf = function(bufnr)
   local injections = get_injections(parser, root, bufnr)
   local lines = { "" }
   traverse(bufnr, lines, root, root, 0, parser:lang(), injections)
+  while true do
+    if #lines > 0 and string.match(lines[#lines], "^%s*$") then
+      table.remove(lines, #lines)
+    else
+      break
+    end
+  end
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 end
 
