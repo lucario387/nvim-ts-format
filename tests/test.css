@@ -1,0 +1,29 @@
+.cac {
+  display: inline-flex;
+}
+.p-tag-icon,
+.p-tag-value,
+.p-tag-icon.pi {
+  line-height: 1.5;
+}
+.cac.p-tag-rounded {
+  border-radius: 10rem;
+}
+.p-tag-status-failed {
+  background-color: var(--status-bg-color-error);
+  color: var(--status-text-color-error);
+}
+.p-tag-status-success,
+.p-tag-status-completed {
+  background-color: var(--status-bg-color-success);
+  color: var(--status-text-color-success);
+}
+.p-tag-status-training,
+.p-tag-status-running {
+  background-color: var(--status-bg-color-running);
+  color: var(--status-text-color-running);
+}
+.p-tag-status-canceled {
+  background-color: var(--status-bg-color-canceled);
+  color: var(--status-text-color-canceled);
+}
